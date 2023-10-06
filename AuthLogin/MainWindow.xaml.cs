@@ -40,55 +40,6 @@ namespace AuthLogin
             this.DragMove();
         }
 
-        private void ValidateLogin(string login)
-        {
-            {
-                if (login.Length < 5)
-                {
-                    throw new Exception("Логин должен содержать минимум 5 символов.");
-                }
-
-                // Проверка формата телефона
-                if (Regex.IsMatch(login, @"^\+\d{1,3}-\d{1,3}-\d{1,4}-\d{1,4}$"))
-                {
-                    // Формат телефона верен
-                    return;
-                }
-
-                // Проверка формата email
-                if (Regex.IsMatch(login, @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$"))
-                {
-                    // Формат email верен
-                    return;
-                }
-
-                // Если не соответствует ни формату телефона, ни формату email, можно считать это строкой
-                if (Regex.IsMatch(login, @"^[a-zA-Z0-9_]+$"))
-                {
-                    // Формат строки верен
-                    return;
-                }
-
-                // Если ни один из форматов не соответствует, генерируем исключение
-                throw new Exception("Некорректный формат логина. Допустимый формат: +x-xxx-xxx-xxxx, xxx@xxx.xxx или строка символов.");
-            }
-        }
-
-        private void ValidatePassword(string password)
-        {
-            if (password.Length < 7 || !Regex.IsMatch(password, @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@#$%^&+=]).+$"))
-            {
-                throw new Exception("Пароль должен содержать минимум 7 символов и включать хотя бы одну букву в верхнем и нижнем регистре, одну цифру и один спецсимвол (@#$%^&+=).");
-            }
-        }
-
-        private void ValidatePasswordMatch(string password, string repeatPassword)
-        {
-            if (password != repeatPassword)
-            {
-                throw new Exception("Пароль и подтверждение пароля не совпадают.");
-            }
-        }
         public static string Encrypt(string value)
         {
             using(MD5CryptoServiceProvider md5 = new MD5CryptoServiceProvider())
@@ -98,41 +49,66 @@ namespace AuthLogin
                 return Convert.ToBase64String(data);
             }
         }
+
+        private List<string> errorMessages = new List<string>();
+
+
+        public string ValidateInput(string login, string password, string repeatPassword)
+        {
+            string passcrypt = Encrypt(password);
+
+            try
+            {
+                if (login.Length < 5)
+                {
+                    errorMessages.Add("Логин должен содержать минимум 5 символов.");
+                }
+
+                if (!Regex.IsMatch(login, @"^\+\d{1,3}-\d{1,3}-\d{1,4}-\d{1,4}$") &&
+                    !Regex.IsMatch(login, @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$") &&
+                    !Regex.IsMatch(login, @"^[a-zA-Z0-9_]+$"))
+                {
+                    errorMessages.Add("Некорректный формат логина. Допустимый формат: +x-xxx-xxx-xxxx, xxx@xxx.xxx или строка символов.");
+                }
+
+                if (password.Length < 7 || !Regex.IsMatch(password, @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@#$%^&+=]).+$"))
+                {
+                    errorMessages.Add("Пароль должен содержать минимум 7 символов и включать хотя бы одну букву в верхнем и нижнем регистре, одну цифру и один спецсимвол (@#$%^&+=).");
+                }
+
+                if (password != repeatPassword)
+                {
+                    errorMessages.Add("Пароль и подтверждение пароля не совпадают.");
+                }
+
+                return passcrypt;
+            }
+            catch (Exception ex)
+            {
+                Log.Information("Ошибка регистрации: Логин={login}, Маскированный Пароль={password}", login, passcrypt);
+                return null; 
+            }
+        }
+
         private void Submit_Click(object sender, RoutedEventArgs e)
         {
             string login = userLogin.Text;
             string password = userPass.Password;
             string repeatPassword = repeatPass.Password;
-            string passcrypt = Encrypt(password);
-            string repeatcrypt = Encrypt(repeatPassword);
-            try
-            {
-               ValidateLogin(login);
-               ValidatePassword(password);
-               ValidatePasswordMatch(password, repeatPassword);
-               MessageBox.Show("Регистрация успешно завершена.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
-               Log.Information("Успешная регистрация: Логин={login}, Маскированный Пароль={password}, Маскированное Подтверждение Пароля={repeatPassword}",
-                login, passcrypt, repeatcrypt);
-            }
-            catch (Exception ex)
-            {
-                    MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-                    Log.Information("Ошибка регистрации: Логин={login}, Маскированный Пароль={password}, Маскированное Подтверждение Пароля={repeatPassword}",
-           login, passcrypt, repeatcrypt);
-            }
-            
-        }
 
-        private string ConvertSecureStringToString(SecureString secureString)
-        {
-            IntPtr ptr = System.Runtime.InteropServices.Marshal.SecureStringToBSTR(secureString);
-            try
+            errorMessages.Clear();
+
+            string passcrypt = ValidateInput(login, password, repeatPassword);
+
+            if (errorMessages.Count == 0)
             {
-                return System.Runtime.InteropServices.Marshal.PtrToStringBSTR(ptr);
+                MessageBox.Show("Регистрация успешно завершена.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                Log.Information("Успешная регистрация: Логин={login}, Маскированный Пароль={password}", login, passcrypt);
             }
-            finally
+            else
             {
-                System.Runtime.InteropServices.Marshal.ZeroFreeBSTR(ptr);
+                string errorMessage = "Ошибка валидации:\n" + string.Join("\n", errorMessages);
+                MessageBox.Show(errorMessage, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
